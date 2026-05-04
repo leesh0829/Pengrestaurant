@@ -17,7 +17,13 @@ async function readJsonResponse<T>(response: Response): Promise<T> {
 export async function fetchRestaurants() {
   try {
     const response = await fetch('/api/restaurants')
-    return readJsonResponse<Restaurant[]>(response)
+    const payload = await readJsonResponse<Restaurant[] | null>(response)
+
+    if (!Array.isArray(payload)) {
+      throw new Error('API 응답 형식이 올바르지 않습니다. 배포된 API 라우팅을 확인해 주세요.')
+    }
+
+    return payload
   } catch (error) {
     if (error instanceof TypeError) {
       throw new Error('API 서버에 연결할 수 없습니다. `npm run dev`로 서버를 함께 실행해 주세요.')
@@ -36,7 +42,13 @@ export async function loginAdmin(password: string) {
       body: JSON.stringify({ password }),
     })
 
-    return readJsonResponse<LoginResponse>(response)
+    const payload = await readJsonResponse<LoginResponse | null>(response)
+
+    if (!payload || typeof payload.token !== 'string' || !payload.token) {
+      throw new Error('로그인 응답 형식이 올바르지 않습니다. 배포된 API 라우팅을 확인해 주세요.')
+    }
+
+    return payload
   } catch (error) {
     if (error instanceof TypeError) {
       throw new Error('API 서버에 연결할 수 없습니다. `npm run dev`로 서버를 함께 실행해 주세요.')
