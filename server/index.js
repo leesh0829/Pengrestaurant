@@ -1,40 +1,48 @@
 import cors from 'cors'
 import dotenv from 'dotenv'
 import express from 'express'
+import { fileURLToPath } from 'node:url'
 import { Pool } from 'pg'
 
 dotenv.config({ path: '.env.local', override: false })
 dotenv.config()
 
 const port = Number(process.env.PORT || 8787)
-const adminPassword = process.env.ADMIN_PASSWORD
-const databaseUrl = process.env.DATABASE_URL
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean)
-
-if (!adminPassword) {
-  console.error('ADMIN_PASSWORD가 설정되지 않았습니다. .env에 강한 비밀번호를 지정해 주세요.')
-  process.exit(1)
-}
 
 const app = express()
 app.set('trust proxy', 1)
 const adminTokens = new Set()
 
 app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true)
-        return
-      }
-      callback(new Error(`CORS 거부: ${origin}`))
-    },
+  cors((request, callback) => {
+    const origin = request.header('Origin')
+    const host = request.header('x-forwarded-host') || request.header('host')
+    const forwardedProtocol = request.header('x-forwarded-proto') || request.protocol || 'http'
+    const protocol = forwardedProtocol.split(',')[0].trim()
+    const sameOrigin = origin && host && origin === `${protocol}://${host}`
+
+    if (!origin || sameOrigin || allowedOrigins.includes(origin)) {
+      callback(null, { origin: true })
+      return
+    }
+
+    callback(new Error(`CORS 거부: ${origin}`))
   }),
 )
 app.use(express.json())
+app.use('/api', async (_request, _response, next) => {
+  try {
+    getAdminPassword()
+    await ensureDatabaseInitialized()
+    next()
+  } catch (error) {
+    next(error)
+  }
+})
 
 const loginAttempts = new Map()
 const LOGIN_WINDOW_MS = 15 * 60 * 1000
@@ -77,26 +85,58 @@ function clearLoginAttempts(request) {
   loginAttempts.delete(ip)
 }
 
-function createPool() {
+function getAdminPassword() {
+  const adminPassword = process.env.ADMIN_PASSWORD
+
+  if (!adminPassword) {
+    throw new Error('ADMIN_PASSWORD가 설정되지 않았습니다. 환경 변수에 강한 비밀번호를 지정해 주세요.')
+  }
+
+  return adminPassword
+}
+
+function getDatabaseUrl() {
+  const databaseUrl = process.env.DATABASE_URL
+
   if (!databaseUrl) {
     throw new Error(
-      'DATABASE_URL이 설정되지 않았습니다. .env.local에 PostgreSQL 연결 문자열을 넣어 주세요.',
+      'DATABASE_URL이 설정되지 않았습니다. 환경 변수에 PostgreSQL 연결 문자열을 넣어 주세요.',
     )
   }
 
-  return new Pool({
-    connectionString: databaseUrl,
-  })
+  return databaseUrl
 }
 
-const pool = createPool()
+let pool
+let databaseInitializationPromise = null
 
-pool.on('error', (error) => {
-  console.error('PostgreSQL idle client error:', error)
-})
+function getPool() {
+  if (!pool) {
+    pool = new Pool({
+      connectionString: getDatabaseUrl(),
+    })
+
+    pool.on('error', (error) => {
+      console.error('PostgreSQL idle client error:', error)
+    })
+  }
+
+  return pool
+}
+
+async function ensureDatabaseInitialized() {
+  if (!databaseInitializationPromise) {
+    databaseInitializationPromise = initializeDatabase().catch((error) => {
+      databaseInitializationPromise = null
+      throw error
+    })
+  }
+
+  await databaseInitializationPromise
+}
 
 async function withTransaction(task) {
-  const client = await pool.connect()
+  const client = await getPool().connect()
 
   try {
     await client.query('BEGIN')
@@ -213,7 +253,7 @@ function validateDraft(draft) {
   return null
 }
 
-async function getRestaurantRows(client = pool) {
+async function getRestaurantRows(client = getPool()) {
   const restaurantResult = await client.query(`
     SELECT
       id,
@@ -240,7 +280,7 @@ async function getRestaurantRows(client = pool) {
   return restaurantResult.rows
 }
 
-async function getMenuRows(client = pool, restaurantId) {
+async function getMenuRows(client = getPool(), restaurantId) {
   const params = []
   let whereClause = ''
 
@@ -292,7 +332,7 @@ async function getRestaurants() {
   return mergeRestaurantsWithMenus(restaurantRows, menuRows)
 }
 
-async function getRestaurantById(restaurantId, client = pool) {
+async function getRestaurantById(restaurantId, client = getPool()) {
   const restaurantResult = await client.query(
     `
       SELECT
@@ -442,7 +482,7 @@ async function upsertRestaurant(restaurantId, draft, existingRestaurant) {
 }
 
 app.get('/api/health', async (_request, response) => {
-  await pool.query('SELECT 1')
+  await getPool().query('SELECT 1')
   response.json({ ok: true })
 })
 
@@ -452,6 +492,7 @@ app.get('/api/restaurants', async (_request, response) => {
 })
 
 app.post('/api/admin/login', rateLimitLogin, (request, response) => {
+  const adminPassword = getAdminPassword()
   const password = String(request.body?.password || '')
 
   if (password !== adminPassword) {
@@ -500,7 +541,7 @@ app.put('/api/restaurants/:restaurantId', requireAdminToken, async (request, res
 })
 
 app.delete('/api/restaurants/:restaurantId', requireAdminToken, async (request, response) => {
-  const deleteResult = await pool.query('DELETE FROM restaurants WHERE id = $1', [
+  const deleteResult = await getPool().query('DELETE FROM restaurants WHERE id = $1', [
     request.params.restaurantId,
   ])
 
@@ -518,16 +559,26 @@ app.use((error, _request, response, _next) => {
 })
 
 async function startServer() {
-  await initializeDatabase()
+  getAdminPassword()
+  await ensureDatabaseInitialized()
 
   app.listen(port, () => {
     console.log(`Pengrestaurant API listening on http://localhost:${port}`)
-    console.log(`PostgreSQL: ${databaseUrl}`)
+    console.log(`PostgreSQL: ${getDatabaseUrl()}`)
   })
 }
 
-startServer().catch((error) => {
-  console.error('PostgreSQL 초기화에 실패했습니다.')
-  console.error(error instanceof Error ? error.message : error)
-  process.exit(1)
-})
+export async function handleRequest(request, response) {
+  await ensureDatabaseInitialized()
+  app(request, response)
+}
+
+export default handleRequest
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  startServer().catch((error) => {
+    console.error('PostgreSQL 초기화에 실패했습니다.')
+    console.error(error instanceof Error ? error.message : error)
+    process.exit(1)
+  })
+}
