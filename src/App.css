@@ -77,13 +77,17 @@
 }
 
 .sidebar.mobile {
+  height: 100%;
   max-height: none;
   min-height: 100%;
   box-shadow: none;
   border: none;
   border-radius: 28px 28px 0 0;
-  padding: 20px 18px 30px;
+  padding: 56px 18px 30px;
   background: linear-gradient(180deg, var(--card-strong), var(--card));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 
 .sidebar-intro,
@@ -195,6 +199,7 @@
   border-radius: 28px 28px 0 0;
   min-height: min(76vh, 720px);
   height: auto;
+  max-height: min(76vh, 720px);
 }
 
 .filter-sheet-head {
@@ -210,6 +215,8 @@
   flex-direction: column;
   gap: 16px;
   padding-right: 4px;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 
 .filter-sheet-backdrop {
@@ -770,6 +777,7 @@
 .restaurant-form-modal {
   max-height: min(88vh, 980px);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .menu-editor {
@@ -800,13 +808,16 @@
   position: fixed;
   left: 12px;
   right: 12px;
+  top: 88px;
   bottom: 12px;
-  top: auto;
   z-index: 21;
+  display: flex;
+  flex-direction: column;
   border-radius: 30px 30px 20px 20px;
-  transform: translateY(calc(100% - 96px));
+  transform: translateY(calc(100% - 108px));
   transition: transform 240ms ease;
   overflow: hidden;
+  max-height: calc(100dvh - 100px);
 }
 
 .mobile-sheet.is-open {
@@ -847,6 +858,11 @@
   .map-badge.floating {
     right: 16px;
     bottom: 120px;
+  }
+
+  .mobile-sheet {
+    top: 84px;
+    max-height: calc(100dvh - 96px);
   }
 
   .filter-grid,
