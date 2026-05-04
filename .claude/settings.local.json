@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(node --check server/index.js)",
+      "Bash(npx tsc *)",
+      "Bash(git check-ignore *)"
+    ]
+  }
+}

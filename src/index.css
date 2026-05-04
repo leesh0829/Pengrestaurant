@@ -1,0 +1,70 @@
+@import url('https://cdn.jsdelivr.net/gh/sunn-us/SUIT/fonts/static/woff2/SUIT.css');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap');
+
+:root {
+  font-family: 'SUIT', sans-serif;
+  color: #1b1f1d;
+  background:
+    radial-gradient(circle at top left, rgba(253, 214, 146, 0.55), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(135, 195, 172, 0.45), transparent 25%),
+    #f5efe2;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  --bg: rgba(255, 251, 244, 0.84);
+  --bg-strong: #fffaf1;
+  --bg-dark: #1f2f2a;
+  --text: #1c221f;
+  --text-muted: #5d685f;
+  --border: rgba(28, 34, 31, 0.12);
+  --primary: #1f7a59;
+  --primary-strong: #125942;
+  --accent: #d98f38;
+  --danger: #a43f34;
+  --shadow: 0 24px 80px rgba(38, 33, 24, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+h1,
+h2,
+h3,
+p,
+ul {
+  margin: 0;
+}
+
+ul {
+  padding: 0;
+  list-style: none;
+}
+
+a {
+  color: inherit;
+}
