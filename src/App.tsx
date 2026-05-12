@@ -98,7 +98,7 @@ function createFilterChangeHandler(setFilters: Dispatch<SetStateAction<Restauran
 function App() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([])
   const [filters, setFilters] = useState<RestaurantFilters>(EMPTY_FILTERS)
-  const [sortOption, setSortOption] = useState<SortOption>('name')
+  const [sortOption, setSortOption] = useState<SortOption>('overallRating')
   const [selectedRestaurantId, setSelectedRestaurantId] = useState<string | null>(null)
   const [adminToken, setAdminToken] = useState(() => sessionStorage.getItem(ADMIN_TOKEN_KEY) || '')
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false)
