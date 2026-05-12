@@ -1,6 +1,7 @@
 import cors from 'cors'
 import dotenv from 'dotenv'
 import express from 'express'
+import { createHmac, timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { Pool } from 'pg'
 
@@ -13,9 +14,10 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
   .map((origin) => origin.trim())
   .filter(Boolean)
 
+const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000
+
 const app = express()
 app.set('trust proxy', 1)
-const adminTokens = new Set()
 
 app.use(
   cors((request, callback) => {
@@ -93,6 +95,67 @@ function getAdminPassword() {
   }
 
   return adminPassword
+}
+
+function getAdminSessionSecret() {
+  return process.env.ADMIN_SESSION_SECRET || getAdminPassword()
+}
+
+function base64UrlEncode(buffer) {
+  return Buffer.from(buffer)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+}
+
+function base64UrlDecode(value) {
+  const padded = value.replace(/-/g, '+').replace(/_/g, '/')
+  const padding = padded.length % 4 === 0 ? '' : '='.repeat(4 - (padded.length % 4))
+  return Buffer.from(padded + padding, 'base64')
+}
+
+function signAdminToken(ttlMs = ADMIN_SESSION_TTL_MS) {
+  const payload = { exp: Date.now() + ttlMs }
+  const payloadEncoded = base64UrlEncode(JSON.stringify(payload))
+  const signature = createHmac('sha256', getAdminSessionSecret()).update(payloadEncoded).digest()
+  return `${payloadEncoded}.${base64UrlEncode(signature)}`
+}
+
+function verifyAdminToken(token) {
+  if (!token || typeof token !== 'string') {
+    return false
+  }
+
+  const parts = token.split('.')
+  if (parts.length !== 2) {
+    return false
+  }
+
+  const [payloadEncoded, signatureEncoded] = parts
+  const expectedSignature = createHmac('sha256', getAdminSessionSecret())
+    .update(payloadEncoded)
+    .digest()
+  const providedSignature = base64UrlDecode(signatureEncoded)
+
+  if (providedSignature.length !== expectedSignature.length) {
+    return false
+  }
+
+  if (!timingSafeEqual(providedSignature, expectedSignature)) {
+    return false
+  }
+
+  try {
+    const payload = JSON.parse(base64UrlDecode(payloadEncoded).toString('utf8'))
+    if (typeof payload?.exp !== 'number' || payload.exp < Date.now()) {
+      return false
+    }
+  } catch {
+    return false
+  }
+
+  return true
 }
 
 function getDatabaseUrl() {
@@ -372,7 +435,7 @@ function requireAdminToken(request, response, next) {
   const authorization = request.get('Authorization') || ''
   const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : ''
 
-  if (!token || !adminTokens.has(token)) {
+  if (!verifyAdminToken(token)) {
     response.status(401).json({ error: '어드민 인증이 필요합니다.' })
     return
   }
@@ -502,8 +565,7 @@ app.post('/api/admin/login', rateLimitLogin, (request, response) => {
   }
 
   clearLoginAttempts(request)
-  const token = crypto.randomUUID()
-  adminTokens.add(token)
+  const token = signAdminToken()
   response.json({ token })
 })
 
